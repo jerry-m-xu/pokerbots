@@ -82,6 +82,8 @@ class View:
         self.me = me = _num(g(state, "seat", g(cfg, "seat", 0)))
         self.hole = parse_cards(g(state, "cards"))
         self.board = parse_cards(g(state, "board"))
+        auction = parse_cards(g(g(state, "variant", {}), "auction_cards", ()))
+        self.dead = [card for card in auction if card not in self.board] if self.board else []
         self.street = len(self.board)            # 0 = preflop, 3 flop, 4 turn, 5 river
 
         stack, bet, status = {}, {}, {}
@@ -98,7 +100,7 @@ class View:
         status.setdefault(me, "active")
 
         # VERIFY: status strings are active / folded / all_in / busted.
-        self.alive = sorted(s for s in stack if status[s] != "busted" and stack[s] + bet[s] > 0)
+        self.alive = sorted(s for s in stack if status[s] != "busted")
         if me not in self.alive:
             self.alive = sorted(self.alive + [me])
         self.in_hand = [s for s in self.alive if status[s] in ("active", "all_in", "allin")]

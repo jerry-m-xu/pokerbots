@@ -26,6 +26,7 @@ except AttributeError:          # VERIFY: where the kit exports Action
     from poker_agent_protocol import Action  # noqa: E402
 
 from sngbot import policy  # noqa: E402
+from sngbot.auction import bids
 from sngbot.tracker import Tracker  # noqa: E402
 from sngbot.view import View, g, kname  # noqa: E402
 
@@ -111,8 +112,11 @@ class Agent(_sdk.Agent):
                 raise
             tracker = Tracker.load(b"", g(cfg, "starting_stack", 0))
             mem_out = memory if isinstance(memory, (bytes, bytearray)) else b""
+        mem_out = bytes(mem_out[:g(cfg, "memory_bytes", 65536)])
         try:
             phase = kname(g(state, "phase", "betting"))
+            if phase == "auction":
+                return Action("bid", cards=bids(state, P.get("auction_mult", 1.0))), mem_out
             if phase != "betting":          # VERIFY: phases a variant adds
                 return fallback(state), mem_out
             v = View(state, tracker)

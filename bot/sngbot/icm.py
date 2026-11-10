@@ -1,14 +1,17 @@
 """ICM (Malmuth-Harville) for one player, plus outcome valuation.
 
 Only the hero's equity is computed, which keeps an 8-player, 3-payout
-evaluation to ~50 inner iterations (~10 us). Payouts deeper than 4 places
-are ignored (the 4th+ places pay 0 by default anyway).
+evaluation to ~50 inner iterations (~10 us). Deeper payout structures use
+the official SDK's full dynamic-programming calculation.
 """
 
 
 def icm_me(stacks, i, payouts):
     """Expected payout of player i given positive stacks (survivors only)."""
     n = len(stacks)
+    if len(payouts) > 4 and n > 4:
+        from poker_agent_protocol.icm import icm
+        return icm(stacks, payouts)[i]
     k = min(len(payouts), n, 4)
     total = float(sum(stacks))
     s = stacks[i]

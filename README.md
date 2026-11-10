@@ -1,77 +1,87 @@
-# Kaden tournament pokerbot
+# Kaden — Flop Auction Hold'em
 
-A working **standard no-limit Texas Hold'em starting bot**, prepared for adaptation
-when the tournament starter kit arrives. The submission adapter currently targets
-a local stand-in SDK. **Official submission compatibility is not yet verified.**
+Tournament bot for the Boston NO LIMIT '26 starter kit. Upload **dist/bot.zip**,
+which contains agent.py and its sngbot modules at the archive root. Do not upload
+the whole repository or agent.py alone. No site upload is performed by these tools.
 
-This is a game-theory-informed, opponent-adaptive baseline, not a solved GTO
-strategy. No exploitability bound or guarantee of winning against other bots is
-claimed. Multiway no-limit tournament equilibrium is not solved by these heuristics.
+This is an opponent-adaptive strategy with ICM decisions and sampled equity, not
+a solved Nash/GTO strategy. The sealed auction and multiway tournament game have
+not been solved here. Results measure performance against test bot families,
+not unknown competitors; see VALIDATION.md.
 
-## Strategy
+The selected default is the pressure profile: wider opening and three-betting
+ranges, smaller continuation bets, and three times the initial auction budget.
+It scored best in our tested fields; the sample does not prove universal superiority.
 
-- Position-dependent opening ranges and precomputed equity against starting-hand ranges.
-- Short-stack shove/call decisions that account for tournament payouts through ICM.
-- Persistent opponent estimates for opens, folds, aggression, and all-in calls,
-  using conservative priors when observations are sparse.
-- Postflop made-hand/draw estimates, pot odds, value betting and selective semi-bluffs.
-- Legal-action clamping, bounded memory, time-aware calculations, and safe fallback actions.
-- Experimental blocker-aware postflop sampling, available through `sample_equity`.
-  It remains disabled by default unless testing supports enabling it.
+## Variant strategy
 
-The default simulator uses eight players, 2,000 chips, increasing blinds and
-50/30/20 payouts. These are development assumptions, not confirmed event rules.
+- Auction: evaluates all ten possible flops and bids on the strongest combination.
+  Spending scales with improvement, pot size, balance and the hand horizon.
+- Equity: uses permitted eval7, excluding the two dead auction cards, our hole
+  cards and the board from samples. Opponent ranges use observed participation.
+  Small samples are shrunk toward a made-hand/draw estimate and stop at a deadline.
+- Preflop: position ranges, steals against frequent folders, three-bets and
+  payout-aware push/fold decisions. Unknown opponents start with conservative priors.
+- Postflop: value bets, selective semi-bluffs, pot odds and payout risk. All-in
+  opponents remain in equity calculations even when their round bet becomes zero.
+- Runtime: table memory carries observations. Static tables load at import;
+  legal raises are clamped and auction bids cannot exceed the balance.
 
-## Layout
+## Build box
 
-`bot/` contains the submission source; `agent.py` is its entry point.
-`devkit/` contains the local SDK, simulator, and several opponent archetypes.
-`tools/` contains packaging, PokerKit position analysis, and verification tools.
-`dist/bot.zip` is the prepared archive, with `agent.py` at its root.
-Upload that ZIP after validating with the official kit; uploading `agent.py` alone
-will omit the required `sngbot/` modules. Do not upload the repository ZIP.
-
-## Run locally
-
-Use Python 3.12. Simulation and packaging require only the standard library.
+The official SDK environment is at ~/work/starter-kit/.venv.
 
 ```bash
-python3 devkit/play.py --tables 400 --field tough --procs 2
-python3 devkit/play.py --tables 100 --field self --procs 2
-python3 tools/test_adapter.py
-python3 tools/pack.py
+cd ~/work/kaden-bot
+source ~/work/starter-kit/.venv/bin/activate
+python tools/test_official.py
+python tools/pack.py
+poker-agent check dist/bot.zip
 ```
 
-The simulator reports tournament points, placements, illegal actions, exceptions,
-and decision timing. Its opponents are heuristics, not external tournament bots.
-Its simplified engine does not implement short all-in raises failing to reopen
-betting. Use the official engine for the final acceptance test.
+For a fresh computer, unpack the official starter kit beside this repository,
+create its Python 3.12 environment, install eval7==0.1.11, and install its three
+SDK packages as described in the kit's README. The engine installs PokerKit 0.7.6
+for local testing. Our runtime needs only eval7 and the SDK/protocol, not the
+optional ML libraries. Never put the SDK or virtual environment inside bot/.
 
-## PokerKit position evaluation
+## Official matches and replay
 
-PokerKit is used in offline analysis and independent evaluator tests. The inherited
-packaging checks prohibit importing `pokerkit` and `poker_engine` in submission
-source; that restriction must be checked against the official starter kit. The
-runtime uses a standard-library evaluator validated against PokerKit.
+Run a full eight-seat match, with seven example opponents:
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python tools/test_evaluator.py
-.venv/bin/python tools/evaluate_position.py --hero AsKh --board QsJh2c --samples 5000
+poker-agent play bot ../starter-kit/examples/min_raiser ../starter-kit/examples/check_or_fold ../starter-kit/examples/min_raiser ../starter-kit/examples/check_or_fold ../starter-kit/examples/min_raiser ../starter-kit/examples/check_or_fold ../starter-kit/examples/min_raiser --tables 20 --seed kaden-final --no-history
+python tools/smoke_official.py --opponent ../starter-kit/examples/min_raiser --tables 10
 ```
 
-The analyzer reports equity, wins, ties, sample count and standard error against
-uniform random legal opponent hands. Heads-up river equity is enumerated exactly;
-other positions are sampled reproducibly. Equity alone is not an action-EV estimate
-and does not account for opponents' betting ranges or future decisions.
+The smoke test uses actual SDK subprocesses, 1 ms decisions, zero bank and
+20-hand heads-up tables. It approximates the published upload test; the hosted
+validator remains the final authority. Normal SDK play uses a time bank.
+Omit --no-history to save a replay, then run replay FILE --no-open. Over SSH,
+forward the viewer's printed port to your Mac before opening it locally.
 
-## When the starter kit arrives
+## Strategy comparisons
 
-1. Verify variant, deck, hole cards, seats, payouts, blinds, limits and memory budget.
-2. Replace assumptions in `bot/agent.py` and `bot/sngbot/view.py` with the real SDK.
-3. Resolve `VERIFY` markers, particularly action amounts and whether pot includes bets.
-4. Run the official validator and matches against its example bots; check timeouts.
-5. Rebuild `dist/bot.zip`, upload it on the Bot page, and confirm the site's test match passes.
+```bash
+python tools/benchmark_official.py --tables 100 --seed 9000 --field auction --profiles baseline equity aggressive pressure --procs 2
+python tools/benchmark_official.py --tables 100 --seed 7000 --field mixed --profiles baseline equity aggressive pressure --procs 2
+```
 
-Keep participant keys in a local environment or secret store, never in Git or the ZIP.
+The benchmark uses the unmodified official engine and scoring. It calls bots
+directly for speed; its timings do not certify subprocess timing. The baseline
+disables auctions and sampling but retains the corrected adapter. Auction
+opponents actively bid; mixed includes tight, loose, shoving and calling bots.
+Seeds differ from the initial tuning run and hero seats rotate. Deadline-based
+sampling can produce different results under different machine loads.
+
+The old devkit/ simulator is historical and does not implement this variant.
+Use the official tools above for current validation.
+
+## Offline position analysis
+
+tools/evaluate_position.py uses PokerKit for standard Hold'em showdown equity.
+It assumes random opponent hands and does not model the auction, so it is only
+a reference. tools/test_evaluator.py cross-checks hand ranks against PokerKit.
+Both stay outside the submission. Runtime sampling excludes auction dead cards.
+
+Never commit participant keys or SSH private keys. Rebuild the ZIP after bot edits.

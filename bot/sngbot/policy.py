@@ -14,6 +14,7 @@ import time
 
 from . import icm
 from .equity import estimate
+from .fast_equity import estimate as fast_estimate
 from .cards import (FLUSH, FULL_HOUSE, HIGH, PAIR, QUADS, STRAIGHT, TRIPS,
                     TWO_PAIR, _STRAIGHT_TOP, evaluate, hand_class)
 from .ranges import eq_vs_random, eq_vs_range
@@ -23,7 +24,7 @@ FOLD, CHECK, CALL, ALLIN = ("fold",), ("check",), ("call",), ("allin",)
 
 P_DEFAULT = {
     # preflop, deep stacks: open the top X% by number of players still to act
-    "open": (0.50, 0.50, 0.42, 0.28, 0.21, 0.16, 0.13, 0.11, 0.10, 0.10),
+    "open": (0.65, 0.60, 0.48, 0.32, 0.24, 0.18, 0.15, 0.13, 0.11, 0.11),
     "steal_k": 0.95, "steal_c": 0.10,   # threshold >= steal_k * P(all fold) - steal_c
     "iso_mult": 0.6,                    # tighten opens when limpers are in
     "open_bb": 2.3,
@@ -31,17 +32,19 @@ P_DEFAULT = {
     "reshove_bb": 22.0,                 # facing one raise at or below this: reshove or fold
     "commit_frac": 0.40,                # betting this share of the stack = all-in decision
     "icm_margin": 0.0,                  # points of EV an all-in must beat folding by
-    "threebet_pct": 0.035, "threebet_eq": 0.62, "3b_ip": 3.0, "3b_oop": 3.6,
+    "threebet_pct": 0.045, "threebet_eq": 0.62, "3b_ip": 3.0, "3b_oop": 3.6,
     "call_eq": 0.47, "ip_bonus": 0.03, "setmine_mult": 15.0,
     "flat_edge": 0.08, "flat_max_frac": 0.15,
     "raiser_call_frac": 0.5,            # raiser calls a reshove with this share of its range
     # postflop
-    "multi_exp": 0.6, "value_e": 0.66, "value_multi": 0.06, "value_size": 0.65,
-    "cbet_size": 0.5, "cbet_fold_min": 0.40, "semibluff_draw": 0.30, "semibluff_size": 0.6,
+    "multi_exp": 0.6, "value_e": 0.63, "value_multi": 0.06, "value_size": 0.65,
+    "cbet_size": 0.4, "cbet_fold_min": 0.40, "semibluff_draw": 0.30, "semibluff_size": 0.6,
     "bet_disc": 0.12, "raise_e": 0.85, "call_margin": 0.02,
     "implied_frac": 0.12, "implied_bonus": 0.06,
     "budget_us": 550,                   # skip ICM loops past this many microseconds
     "sample_equity": False,
+    "fast_equity": True,
+    "auction_mult": 3.0,
 }
 
 
@@ -423,6 +426,9 @@ def postflop(v, T, P, deadline):
     if P.get("sample_equity"):
         widths = [max(.15, T.vpip(seat)) for seat in v.opps]
         e = estimate(v.hole, v.board, widths, deadline - 100_000, e)
+        e_made = max(0.0, (e - draw) / max(.01, 1 - draw))
+    if P.get("fast_equity"):
+        e = fast_estimate(v, T, deadline - 120_000, e)
         e_made = max(0.0, (e - draw) / max(.01, 1 - draw))
     pot = v.pot
 
